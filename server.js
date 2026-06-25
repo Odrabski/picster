@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const session = require('express-session');
+const cookieSession = require('cookie-session');
 const passport = require('passport');
 const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 const axios = require('axios');
@@ -8,11 +8,22 @@ const path = require('path');
 
 const app = express();
 
-app.use(session({
+app.use(cookieSession({
+  name: 'picster',
   secret: process.env.SESSION_SECRET || 'picster-dev-secret',
-  resave: false,
-  saveUninitialized: false,
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
 }));
+
+// cookie-session compatibility shim for passport
+app.use((req, _res, next) => {
+  if (req.session && !req.session.regenerate) {
+    req.session.regenerate = (cb) => cb();
+    req.session.save = (cb) => cb();
+  }
+  next();
+});
 
 app.use(passport.initialize());
 app.use(passport.session());
