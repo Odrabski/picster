@@ -51,7 +51,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/auth/google', passport.authenticate('google', {
   scope: [
     'profile',
-    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/photoslibrary.readonly',
   ],
   accessType: 'offline',
   prompt: 'consent',
@@ -80,31 +80,25 @@ app.get('/api/random-photo', async (req, res) => {
 
   try {
     const response = await axios.get(
-      'https://www.googleapis.com/drive/v3/files',
+      'https://photoslibrary.googleapis.com/v1/mediaItems',
       {
         headers: { Authorization: `Bearer ${req.user.accessToken}` },
-        params: {
-          q: "mimeType contains 'image/' and trashed = false",
-          pageSize: 100,
-          fields: 'files(id,name,thumbnailLink,mimeType)',
-          orderBy: 'modifiedTime desc',
-        },
+        params: { pageSize: 100 },
       }
     );
 
-    const items = response.data.files || [];
+    const items = (response.data.mediaItems || []).filter(
+      (item) => item.mediaMetadata?.photo
+    );
 
     if (items.length === 0) {
-      return res.status(404).json({ error: 'No photos found in your Google Drive' });
+      return res.status(404).json({ error: 'No photos found in your library' });
     }
 
     const item = items[Math.floor(Math.random() * items.length)];
-    const thumbnail = item.thumbnailLink?.replace(/=s\d+$/, '=s1600') || null;
-
     res.json({
-      url: thumbnail,
-      fileId: item.id,
-      filename: item.name,
+      url: `${item.baseUrl}=w1400-h1000`,
+      filename: item.filename,
     });
   } catch (err) {
     const status = err.response?.status;
@@ -112,7 +106,7 @@ app.get('/api/random-photo', async (req, res) => {
       return res.status(401).json({ error: 'Session expired, please log in again' });
     }
     const detail = err.response?.data || err.message;
-    console.error('Drive API error:', detail);
+    console.error('Photos API error:', detail);
     res.status(500).json({ error: 'Failed to fetch photos', detail });
   }
 });
