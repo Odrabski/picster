@@ -111,8 +111,9 @@ app.get('/api/random-photo', async (req, res) => {
     if (status === 401) {
       return res.status(401).json({ error: 'Session expired, please log in again' });
     }
-    console.error('Drive API error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to fetch photos' });
+    const detail = err.response?.data || err.message;
+    console.error('Drive API error:', detail);
+    res.status(500).json({ error: 'Failed to fetch photos', detail });
   }
 });
 
