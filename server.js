@@ -8,6 +8,8 @@ const path = require('path');
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 app.use(cookieSession({
   name: 'picster',
   secret: process.env.SESSION_SECRET || 'picster-dev-secret',
@@ -32,7 +34,9 @@ passport.use(new GoogleStrategy(
   {
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: '/auth/google/callback',
+    callbackURL: process.env.APP_URL
+      ? `${process.env.APP_URL}/auth/google/callback`
+      : '/auth/google/callback',
   },
   (accessToken, refreshToken, profile, done) => {
     done(null, { profile, accessToken });
