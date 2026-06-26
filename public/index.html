@@ -237,16 +237,52 @@
     const nextBtn = document.getElementById('next-btn');
     const errorMsg = document.getElementById('error-msg');
 
+    let pollInterval = null;
+
     async function init() {
       const res = await fetch('/api/me');
       const data = await res.json();
-      if (data.loggedIn) {
-        loginScreen.style.display = 'none';
-        photoScreen.style.display = 'flex';
-        document.getElementById('user-name').textContent = data.name;
-        if (data.photo) {
-          document.getElementById('user-avatar').src = data.photo;
-        }
+      if (!data.loggedIn) return;
+
+      loginScreen.style.display = 'none';
+      photoScreen.style.display = 'flex';
+      document.getElementById('user-name').textContent = data.name;
+      if (data.photo) document.getElementById('user-avatar').src = data.photo;
+
+      if (data.hasSession) {
+        loadPhoto();
+      } else {
+        showPickerPrompt();
+      }
+    }
+
+    function showPickerPrompt() {
+      spinner.style.display = 'none';
+      nextBtn.textContent = 'Choose your photos';
+      nextBtn.disabled = false;
+      nextBtn.onclick = openPicker;
+      filenameEl.textContent = 'Select which photos to use';
+    }
+
+    async function openPicker() {
+      nextBtn.disabled = true;
+      filenameEl.textContent = 'Opening Google Photos...';
+      const res = await fetch('/api/picker/create', { method: 'POST' });
+      const data = await res.json();
+      if (data.error) { showError(JSON.stringify(data.error)); return; }
+
+      window.open(data.pickerUri, '_blank', 'width=900,height=700');
+      filenameEl.textContent = 'Pick your photos in the popup, then come back here.';
+      pollInterval = setInterval(checkPickerDone, 3000);
+    }
+
+    async function checkPickerDone() {
+      const res = await fetch('/api/picker/status');
+      const data = await res.json();
+      if (data.ready) {
+        clearInterval(pollInterval);
+        nextBtn.textContent = 'Next Photo';
+        nextBtn.onclick = loadPhoto;
         loadPhoto();
       }
     }
@@ -259,14 +295,11 @@
 
       try {
         const res = await fetch('/api/random-photo');
-        if (res.status === 401) {
-          location.href = '/';
-          return;
-        }
+        if (res.status === 401) { location.href = '/'; return; }
         const data = await res.json();
         if (data.error) {
           const detail = data.detail?.error?.message || data.detail || '';
-          showError(`${data.error}: ${detail}`);
+          showError(`${data.error}${detail ? ': ' + detail : ''}`);
           return;
         }
         photoEl.src = data.url;

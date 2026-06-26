@@ -13,12 +13,11 @@ app.set('trust proxy', 1);
 app.use(cookieSession({
   name: 'picster',
   secret: process.env.SESSION_SECRET || 'picster-dev-secret',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  maxAge: 30 * 24 * 60 * 60 * 1000,
   sameSite: 'lax',
   secure: process.env.NODE_ENV === 'production',
 }));
 
-// cookie-session compatibility shim for passport
 app.use((req, _res, next) => {
   if (req.session && !req.session.regenerate) {
     req.session.regenerate = (cb) => cb();
@@ -51,7 +50,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/auth/google', passport.authenticate('google', {
   scope: [
     'profile',
-    'https://www.googleapis.com/auth/photoslibrary.readonly',
+    'https://www.googleapis.com/auth/photospicker.mediaitems.readonly',
   ],
   accessType: 'offline',
   prompt: 'consent',
@@ -66,59 +65,82 @@ app.get('/auth/logout', (req, res) => {
   req.logout(() => res.redirect('/'));
 });
 
-app.get('/api/debug', async (req, res) => {
-  if (!req.user) return res.json({ loggedIn: false });
-  try {
-    const r = await axios.get(
-      `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${req.user.accessToken}`
-    );
-    res.json(r.data);
-  } catch (e) {
-    res.json({ error: e.response?.data || e.message });
-  }
-});
-
 app.get('/api/me', (req, res) => {
   if (!req.user) return res.json({ loggedIn: false });
   res.json({
     loggedIn: true,
     name: req.user.profile.displayName,
     photo: req.user.profile.photos?.[0]?.value,
+    hasSession: !!req.session.pickerSessionId,
   });
 });
 
-app.get('/api/random-photo', async (req, res) => {
+// Create a new picker session
+app.post('/api/picker/create', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
 
   try {
+    const response = await axios.post(
+      'https://photospicker.googleapis.com/v1/sessions',
+      {},
+      { headers: { Authorization: `Bearer ${req.user.accessToken}` } }
+    );
+    req.session.pickerSessionId = response.data.id;
+    res.json({ pickerUri: response.data.pickerUri });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
+
+// Check if user has finished picking
+app.get('/api/picker/status', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!req.session.pickerSessionId) return res.json({ ready: false, noSession: true });
+
+  try {
     const response = await axios.get(
-      'https://photoslibrary.googleapis.com/v1/mediaItems',
+      `https://photospicker.googleapis.com/v1/sessions/${req.session.pickerSessionId}`,
+      { headers: { Authorization: `Bearer ${req.user.accessToken}` } }
+    );
+    res.json({ ready: !!response.data.mediaItemsSet });
+  } catch (err) {
+    req.session.pickerSessionId = null;
+    res.json({ ready: false, noSession: true });
+  }
+});
+
+// Get a random photo from the picker session
+app.get('/api/random-photo', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!req.session.pickerSessionId) {
+    return res.status(404).json({ error: 'No photos selected yet' });
+  }
+
+  try {
+    const response = await axios.get(
+      'https://photospicker.googleapis.com/v1/mediaItems',
       {
         headers: { Authorization: `Bearer ${req.user.accessToken}` },
-        params: { pageSize: 100 },
+        params: { sessionId: req.session.pickerSessionId, pageSize: 100 },
       }
     );
 
     const items = (response.data.mediaItems || []).filter(
-      (item) => item.mediaMetadata?.photo
+      (item) => item.type === 'PHOTO'
     );
 
     if (items.length === 0) {
-      return res.status(404).json({ error: 'No photos found in your library' });
+      return res.status(404).json({ error: 'No photos in your selection' });
     }
 
     const item = items[Math.floor(Math.random() * items.length)];
     res.json({
-      url: `${item.baseUrl}=w1400-h1000`,
-      filename: item.filename,
+      url: `${item.mediaFile.baseUrl}=w1400-h1000`,
+      filename: item.mediaFile.filename || '',
     });
   } catch (err) {
-    const status = err.response?.status;
-    if (status === 401) {
-      return res.status(401).json({ error: 'Session expired, please log in again' });
-    }
     const detail = err.response?.data || err.message;
-    console.error('Photos API error:', detail);
+    console.error('Picker API error:', detail);
     res.status(500).json({ error: 'Failed to fetch photos', detail });
   }
 });
