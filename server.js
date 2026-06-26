@@ -75,6 +75,7 @@ app.get('/api/me', (req, res) => {
   });
 });
 
+// People CRUD
 app.get('/api/people', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   res.json({ people: req.session.people || [] });
@@ -93,11 +94,14 @@ app.post('/api/people', (req, res) => {
 app.delete('/api/people/:index', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   const people = req.session.people || [];
-  people.splice(parseInt(req.params.index), 1);
+  const i = parseInt(req.params.index);
+  if (isNaN(i) || i < 0 || i >= people.length) return res.status(404).json({ error: 'Not found' });
+  people.splice(i, 1);
   req.session.people = people;
   res.json({ ok: true });
 });
 
+// Picker session
 app.post('/api/picker/create', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   try {
@@ -122,11 +126,12 @@ app.get('/api/picker/status', async (req, res) => {
       { headers: { Authorization: `Bearer ${req.user.accessToken}` } }
     );
     res.json({ ready: !!response.data.mediaItemsSet });
-  } catch (err) {
+  } catch {
     res.json({ ready: false });
   }
 });
 
+// Random photo from a picker session
 app.get('/api/random-photo', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   const { sessionId } = req.query;
@@ -147,9 +152,13 @@ app.get('/api/random-photo', async (req, res) => {
       filename: item.mediaFile.filename || '',
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch photo', detail: err.response?.data || err.message });
+    const detail = err.response?.data || err.message;
+    console.error('Photo fetch error:', detail);
+    res.status(500).json({ error: 'Failed to fetch photo', detail });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Picster running at http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Picster running at http://localhost:${PORT}`);
+});
