@@ -66,6 +66,18 @@ app.get('/auth/logout', (req, res) => {
   req.logout(() => res.redirect('/'));
 });
 
+app.get('/api/debug', async (req, res) => {
+  if (!req.user) return res.json({ loggedIn: false });
+  try {
+    const r = await axios.get(
+      `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${req.user.accessToken}`
+    );
+    res.json(r.data);
+  } catch (e) {
+    res.json({ error: e.response?.data || e.message });
+  }
+});
+
 app.get('/api/me', (req, res) => {
   if (!req.user) return res.json({ loggedIn: false });
   res.json({
