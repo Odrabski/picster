@@ -97,7 +97,7 @@
       <button class="btn-add" onclick="showAddScreen()">+ Add Person</button>
     </div>
     <div id="empty-state">
-      <div class="icon">👤</div>
+      <div class="icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
       <p>Add people to see random photos of them</p>
       <button class="btn-add" style="margin-top:8px" onclick="showAddScreen()">+ Add Person</button>
     </div>
@@ -177,7 +177,7 @@
       <div class="person-card" onclick="openPerson(${i}, '${esc(p.name)}', '${esc(p.sessionId)}')">
         ${p.previewUrl
           ? `<img src="${esc(p.previewUrl)}" alt="${esc(p.name)}" onerror="this.style.display='none'" />`
-          : `<div class="card-placeholder">👤</div>`}
+          : `<div class="card-placeholder"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>`}
         <div class="card-label">${esc(p.name)}</div>
         <button class="delete-btn" onclick="deletePerson(event,${i})">✕</button>
       </div>`).join('');
