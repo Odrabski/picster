@@ -131,30 +131,37 @@ app.get('/api/picker/status', async (req, res) => {
   }
 });
 
-// Random photo from a picker session
+// Random photo — picks item, then proxies the image bytes with auth header
 app.get('/api/random-photo', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   const { sessionId } = req.query;
   if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
   try {
-    const response = await axios.get(
+    const listRes = await axios.get(
       'https://photospicker.googleapis.com/v1/mediaItems',
       {
         headers: { Authorization: `Bearer ${req.user.accessToken}` },
         params: { sessionId, pageSize: 100 },
       }
     );
-    const items = (response.data.mediaItems || []).filter(i => i.type === 'PHOTO');
+    const items = (listRes.data.mediaItems || []).filter(i => i.type === 'PHOTO');
     if (items.length === 0) return res.status(404).json({ error: 'No photos in this selection' });
     const item = items[Math.floor(Math.random() * items.length)];
-    res.json({
-      url: `${item.mediaFile.baseUrl}=w1400-h1000`,
-      filename: item.mediaFile.filename || '',
+    const imageUrl = `${item.mediaFile.baseUrl}=w1400-h1000`;
+
+    const imgRes = await axios.get(imageUrl, {
+      headers: { Authorization: `Bearer ${req.user.accessToken}` },
+      responseType: 'arraybuffer',
     });
+
+    res.set('Content-Type', imgRes.headers['content-type'] || 'image/jpeg');
+    res.set('Cache-Control', 'private, max-age=1800');
+    res.set('X-Filename', encodeURIComponent(item.mediaFile.filename || ''));
+    res.send(Buffer.from(imgRes.data));
   } catch (err) {
     const detail = err.response?.data || err.message;
     console.error('Photo fetch error:', detail);
-    res.status(500).json({ error: 'Failed to fetch photo', detail });
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to fetch photo', detail });
   }
 });
 

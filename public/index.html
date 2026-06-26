@@ -231,12 +231,7 @@
     const name = document.getElementById('person-name-input').value.trim();
     if (!name) { document.getElementById('person-name-input').focus(); return; }
 
-    let previewUrl = null;
-    try {
-      const r = await fetch(`/api/random-photo?sessionId=${pendingSessionId}`);
-      const d = await r.json();
-      if (d.url) previewUrl = d.url;
-    } catch {}
+    const previewUrl = `/api/random-photo?sessionId=${encodeURIComponent(pendingSessionId)}&t=${Date.now()}`;
 
     await fetch('/api/people', {
       method: 'POST',
@@ -268,35 +263,20 @@
     photoEl.classList.add('hidden');
     spinner.style.display = 'block';
 
-    try {
-      const res = await fetch(`/api/random-photo?sessionId=${sessionId}`);
-      const data = await res.json();
-      if (data.error) {
-        spinner.style.display = 'none';
-        errorEl.textContent = data.error;
-        errorEl.style.display = 'block';
-        nextBtn.disabled = false;
-        return;
-      }
-      photoEl.src = data.url;
-      photoEl.onload = () => {
-        spinner.style.display = 'none';
-        photoEl.classList.remove('hidden');
-        document.getElementById('photo-filename').textContent = data.filename || '';
-        nextBtn.disabled = false;
-      };
-      photoEl.onerror = () => {
-        spinner.style.display = 'none';
-        errorEl.textContent = 'Could not load photo, try again.';
-        errorEl.style.display = 'block';
-        nextBtn.disabled = false;
-      };
-    } catch {
+    // Image is proxied through server — use cache-busting timestamp
+    const url = `/api/random-photo?sessionId=${encodeURIComponent(sessionId)}&t=${Date.now()}`;
+    photoEl.src = url;
+    photoEl.onload = () => {
       spinner.style.display = 'none';
-      errorEl.textContent = 'Network error.';
+      photoEl.classList.remove('hidden');
+      nextBtn.disabled = false;
+    };
+    photoEl.onerror = () => {
+      spinner.style.display = 'none';
+      errorEl.textContent = 'Could not load photo — try again.';
       errorEl.style.display = 'block';
       nextBtn.disabled = false;
-    }
+    };
   }
 
   function setView(id) {
