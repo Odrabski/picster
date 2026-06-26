@@ -265,7 +265,8 @@
         }
         const data = await res.json();
         if (data.error) {
-          showError(data.error);
+          const detail = data.detail?.error?.message || data.detail || '';
+          showError(`${data.error}: ${detail}`);
           return;
         }
         photoEl.src = data.url;
