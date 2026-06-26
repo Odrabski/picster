@@ -9,6 +9,7 @@ const path = require('path');
 const app = express();
 
 app.set('trust proxy', 1);
+app.use(express.json());
 
 app.use(cookieSession({
   name: 'picster',
@@ -71,81 +72,84 @@ app.get('/api/me', (req, res) => {
     loggedIn: true,
     name: req.user.profile.displayName,
     photo: req.user.profile.photos?.[0]?.value,
-    hasSession: !!req.session.pickerSessionId,
   });
 });
 
-// Create a new picker session
+app.get('/api/people', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json({ people: req.session.people || [] });
+});
+
+app.post('/api/people', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  const { name, sessionId, previewUrl } = req.body;
+  if (!name || !sessionId) return res.status(400).json({ error: 'Missing name or sessionId' });
+  const people = req.session.people || [];
+  people.push({ name, sessionId, previewUrl: previewUrl || null });
+  req.session.people = people;
+  res.json({ ok: true });
+});
+
+app.delete('/api/people/:index', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  const people = req.session.people || [];
+  people.splice(parseInt(req.params.index), 1);
+  req.session.people = people;
+  res.json({ ok: true });
+});
+
 app.post('/api/picker/create', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-
   try {
     const response = await axios.post(
       'https://photospicker.googleapis.com/v1/sessions',
       {},
       { headers: { Authorization: `Bearer ${req.user.accessToken}` } }
     );
-    req.session.pickerSessionId = response.data.id;
-    res.json({ pickerUri: response.data.pickerUri });
+    res.json({ sessionId: response.data.id, pickerUri: response.data.pickerUri });
   } catch (err) {
     res.status(500).json({ error: err.response?.data || err.message });
   }
 });
 
-// Check if user has finished picking
 app.get('/api/picker/status', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-  if (!req.session.pickerSessionId) return res.json({ ready: false, noSession: true });
-
+  const { sessionId } = req.query;
+  if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
   try {
     const response = await axios.get(
-      `https://photospicker.googleapis.com/v1/sessions/${req.session.pickerSessionId}`,
+      `https://photospicker.googleapis.com/v1/sessions/${sessionId}`,
       { headers: { Authorization: `Bearer ${req.user.accessToken}` } }
     );
     res.json({ ready: !!response.data.mediaItemsSet });
   } catch (err) {
-    req.session.pickerSessionId = null;
-    res.json({ ready: false, noSession: true });
+    res.json({ ready: false });
   }
 });
 
-// Get a random photo from the picker session
 app.get('/api/random-photo', async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-  if (!req.session.pickerSessionId) {
-    return res.status(404).json({ error: 'No photos selected yet' });
-  }
-
+  const { sessionId } = req.query;
+  if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
   try {
     const response = await axios.get(
       'https://photospicker.googleapis.com/v1/mediaItems',
       {
         headers: { Authorization: `Bearer ${req.user.accessToken}` },
-        params: { sessionId: req.session.pickerSessionId, pageSize: 100 },
+        params: { sessionId, pageSize: 100 },
       }
     );
-
-    const items = (response.data.mediaItems || []).filter(
-      (item) => item.type === 'PHOTO'
-    );
-
-    if (items.length === 0) {
-      return res.status(404).json({ error: 'No photos in your selection' });
-    }
-
+    const items = (response.data.mediaItems || []).filter(i => i.type === 'PHOTO');
+    if (items.length === 0) return res.status(404).json({ error: 'No photos in this selection' });
     const item = items[Math.floor(Math.random() * items.length)];
     res.json({
       url: `${item.mediaFile.baseUrl}=w1400-h1000`,
       filename: item.mediaFile.filename || '',
     });
   } catch (err) {
-    const detail = err.response?.data || err.message;
-    console.error('Picker API error:', detail);
-    res.status(500).json({ error: 'Failed to fetch photos', detail });
+    res.status(500).json({ error: 'Failed to fetch photo', detail: err.response?.data || err.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Picster running at http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Picster running at http://localhost:${PORT}`));
