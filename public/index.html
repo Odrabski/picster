@@ -7,6 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#000000" />
   <title>Picster</title>
+  <script src="https://cdn.jsdelivr.net/npm/exifr@7/dist/lite.umd.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -163,6 +164,23 @@
 
     #next-btn:active { transform: scale(0.94); }
 
+    /* ── Year ── */
+    #year-display {
+      position: absolute;
+      top: calc(env(safe-area-inset-top) + 72px);
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 5.5rem;
+      font-weight: 900;
+      letter-spacing: -3px;
+      color: rgba(255,255,255,0.92);
+      text-shadow: 0 2px 24px rgba(0,0,0,0.6);
+      pointer-events: none;
+      z-index: 8;
+      transition: opacity 0.2s;
+    }
+
     /* ── Spinner ── */
     #spinner {
       position: absolute;
@@ -234,6 +252,7 @@
     <span id="count"></span>
   </div>
 
+  <div id="year-display"></div>
   <img id="photo" alt="" onclick="nextPhoto()" />
 
   <div id="spinner"><div class="spin"></div></div>
@@ -278,12 +297,22 @@
     });
   }
 
+  async function getYear(file) {
+    try {
+      const exif = await exifr.parse(file, ['DateTimeOriginal', 'CreateDate']);
+      const date = exif?.DateTimeOriginal || exif?.CreateDate;
+      if (date) return new Date(date).getFullYear();
+    } catch {}
+    return new Date(file.lastModified).getFullYear();
+  }
+
   async function savePhotos(files) {
     const db = await openDB();
     const tx = db.transaction('photos', 'readwrite');
     const store = tx.objectStore('photos');
     for (const file of files) {
-      store.add({ blob: file, name: file.name, added: Date.now() });
+      const year = await getYear(file);
+      store.add({ blob: file, name: file.name, added: Date.now(), year });
     }
     return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = e => rej(e.target.error); });
   }
@@ -370,6 +399,7 @@
     currentObjectUrl = URL.createObjectURL(record.blob);
 
     document.getElementById('photo-bg').style.backgroundImage = `url(${currentObjectUrl})`;
+    document.getElementById('year-display').textContent = record.year || '';
     photoEl.src = currentObjectUrl;
     photoEl.onload = () => {
       spinner.style.display = 'none';
