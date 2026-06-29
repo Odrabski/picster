@@ -72,6 +72,9 @@
       position: relative;
       overflow: hidden;
     }
+    #photo-area.zoomable {
+      cursor: zoom-in;
+    }
 
     #photo {
       width: 100%; height: 100%;
@@ -183,6 +186,52 @@
       cursor: pointer;
     }
 
+    /* ── Lightbox ── */
+    #lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0,0,0,0.92);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      cursor: zoom-out;
+    }
+    #lightbox.open {
+      display: flex;
+      animation: lb-in 0.2s ease;
+    }
+    @keyframes lb-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    #lightbox-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 2px;
+      box-shadow: 0 8px 60px rgba(0,0,0,0.8);
+      pointer-events: none;
+    }
+    #lightbox-close {
+      position: absolute;
+      top: max(env(safe-area-inset-top), 12px);
+      right: 16px;
+      background: rgba(255,255,255,0.12);
+      border: none;
+      color: #fff;
+      font-size: 1.4rem;
+      line-height: 1;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
     /* ── Animations ── */
     @keyframes shake {
       0%,100% { transform: translateX(0); }
@@ -231,7 +280,7 @@
 <!-- Polaroid -->
 <div id="tilt-wrapper">
   <div id="polaroid">
-    <div id="photo-area">
+    <div id="photo-area" onclick="openLightbox()">
       <img id="photo" class="loading" alt="" />
       <div id="photo-spinner"><div class="spin"></div></div>
     </div>
@@ -248,6 +297,12 @@
 
 <!-- Action button -->
 <button id="action-btn" onclick="handleAction()">Submit</button>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox()">
+  <button id="lightbox-close" onclick="closeLightbox()">&#x2715;</button>
+  <img id="lightbox-img" alt="" />
+</div>
 
 <input id="file-input" type="file" accept="image/*" multiple style="display:none" />
 
@@ -312,6 +367,7 @@
   const $ = id => document.getElementById(id);
   const photoEl      = $('photo');
   const photoSpinner = $('photo-spinner');
+  const photoArea    = $('photo-area');
   const yearInput    = $('year-input');
   const resultEl     = $('result');
   const line1        = $('result-line1');
@@ -320,12 +376,33 @@
   const scoreText    = $('score-text');
   const polaroid     = $('polaroid');
   const tiltWrapper  = $('tilt-wrapper');
+  const lightbox     = $('lightbox');
+  const lightboxImg  = $('lightbox-img');
 
   function animate(el, cls) {
     el.classList.remove(cls);
     void el.offsetWidth;
     el.classList.add(cls);
     el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+  }
+
+  // ── Lightbox ──
+  function openLightbox() {
+    if (gameState !== 'guessing' && gameState !== 'answered') return;
+    if (!currentObjectUrl) return;
+    lightboxImg.src = currentObjectUrl;
+    lightbox.classList.add('open');
+    document.addEventListener('keydown', onLightboxKey);
+  }
+
+  function closeLightbox() {
+    lightbox.classList.remove('open');
+    lightboxImg.src = '';
+    document.removeEventListener('keydown', onLightboxKey);
+  }
+
+  function onLightboxKey(e) {
+    if (e.key === 'Escape') closeLightbox();
   }
 
   async function init() {
@@ -348,6 +425,7 @@
     gameState = 'loading';
     actionBtn.disabled = true;
     actionBtn.textContent = 'Submit';
+    photoArea.classList.remove('zoomable');
 
     yearInput.value = '';
     yearInput.style.display = 'block';
@@ -375,6 +453,7 @@
       photoEl.classList.remove('loading');
       gameState = 'guessing';
       actionBtn.disabled = false;
+      photoArea.classList.add('zoomable');
       setTimeout(() => yearInput.focus(), 50);
     };
   }
